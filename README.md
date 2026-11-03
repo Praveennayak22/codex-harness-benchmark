@@ -8,66 +8,20 @@ Evaluate whether a coding agent can modify an existing JavaScript application co
 
 > **Scope:** Docker limits apply to Codex CLI and the local processes it launches. The AI model runs remotely on OpenAI infrastructure, outside these limits. Consequently, wall-clock time includes network and model latency.
 
-## How the benchmark worked: before and after Codex
+## What happened before and after Codex
 
-### Step 1 — Start with an existing buggy web application
+**Starting project:** TaskFlow, an existing JavaScript Task Manager supporting task creation, completion toggling, search, status filtering, priority sorting, and task summaries. We deliberately introduced **four bugs** into its task logic:
 
-We began with **TaskFlow**, an existing dependency-free JavaScript Task Manager. It allows a user to add tasks, mark them complete, search tasks, filter by completion status, sort by priority, and view task counts. **We did not ask Codex to build this application from scratch.** The purpose was to evaluate whether it could fix an existing codebase under limited local computing resources.
+1. Searching was case-sensitive when it should ignore letter case.
+2. Searching for a nonexistent task threw an error instead of returning an empty list.
+3. The completed and pending filters returned the opposite tasks.
+4. Priority sorting ran from low to high rather than high to low.
 
-We intentionally introduced **four bugs** in the task logic and created **14 independent automated tests**. Before Codex made any changes:
+We created **14 independent tests** for the application's behavior. **Before Codex, 9 tests passed and 5 failed (9/14)**. The four bugs caused five test failures because the incorrect status filter affected both completed and pending cases. **These are counts of tests, not files.**
 
-| Initial check | Result |
-|---|---:|
-| Total automated tests | **14** |
-| Tests passing | **9** |
-| Tests failing | **5** |
-| Deliberately introduced bugs | **4** |
+**Repair and verification workflow:** For each experiment, the runner copies the original buggy application into a fresh workspace, starts Codex CLI inside Docker with a specified CPU/RAM limit, and gives it the same bug-fixing prompt in `task.md`. Codex inspects and edits the application source. After it exits, a separate Node.js container runs the **14 independent acceptance tests**, which were not mounted in Codex's workspace. The runner also measures elapsed time, sampled container resource usage, process exit status, and OOM status.
 
-**These numbers refer to tests, not files.** Five tests failed because the incorrect status-filtering logic affected two tests (completed and pending).
-
-### Step 2 — Understand the four defects
-
-| Feature | What happened before the repair | What Codex needed to fix |
-|---|---|---|
-| Case-sensitive search | Searching for "report" did not find "REPORT" | Match titles without considering case |
-| No-match search | A search with no results threw an error | Return an empty list instead of crashing |
-| Status filter | "completed" and "pending" returned the opposite results | Filter tasks by their actual status |
-| Priority sorting | Sorted from low to high priority | Sort high, then medium, then low |
-
-Other functionality, including adding tasks, toggling completion, and generating summaries, already worked and needed to remain correct.
-
-### Step 3 — Run Codex and verify its work
-
-1. For each experiment, copy the **original buggy project** into a fresh run folder. This prevents previous fixes from affecting later trials.
-2. Launch **Codex CLI inside a Docker container** with specified CPU and RAM limits.
-3. Give Codex the bug-fixing instructions in **task.md**. It inspects source files and makes the changes.
-4. After the agent finishes, run the **14 independent acceptance tests** in a separate Node.js container. The tests are not mounted into the agent workspace.
-5. Record elapsed time, sampled CPU/RAM use, test outcomes, exit code, and whether Docker reported an out-of-memory kill.
-
-**Process:** Original app (9/14 passing) → fresh copy → resource-limited Codex repair → independent tests → measured results.
-
-### Step 4 — What changed after Codex?
-
-For the successful repair runs, the independent tests reported:
-
-| Correctness measure | Before Codex | After successful repair |
-|---|---:|---:|
-| Tests passed | **9/14** | **14/14** |
-| Tests failed | **5** | **0** |
-| Pass rate on covered behaviors | **64.3%** | **100%** |
-
-**Main result: Codex improved the application from 9/14 passing to 14/14 passing tests.** It repaired the four intended bugs and preserved existing functions covered by the tests. This does not guarantee that the application is bug-free outside those tests.
-
-### Step 5 — Why we tested different CPU and RAM limits
-
-Correctness alone does not tell us whether a local coding harness is lightweight. We reran the **same task** with controlled Docker resources:
-
-- **Memory experiments:** 2 GiB, 1 GiB, 512 MiB and 256 MiB RAM, with CPU fixed at 1 CPU.
-- **CPU experiments:** 1, 0.5 and 0.25 CPU quotas, with RAM fixed at 512 MiB.
-
-The detailed results below document task completion times, observed peak memory, sampled CPU, and the one reported Wi-Fi-related failure. Codex **successfully completed this specific task** with **256 MiB at 1 CPU** and, separately, **512 MiB at 0.25 CPU**. We did not test those two lowest limits together.
-
-**Important interpretation:** Docker restricts the **local Codex harness and child processes**, not the remote AI model. Network/model response latency affects wall-clock time, and memory/CPU samples are not exact instantaneous peaks.
+**After successful Codex repairs, all 14 tests passed and none failed (14/14).** The task therefore improved from **9/14 → 14/14** on the tested behaviors while preserving existing features covered by those tests. This is a focused bug-fixing benchmark, not proof that every possible application behavior is correct.
 
 ## Task: TaskFlow bug fixing
 
@@ -158,30 +112,36 @@ docker run --rm --memory="512m" --cpus="1" `
   node:22-bookworm-slim node --test tests/taskManager.test.mjs
 ```
 
-## Preliminary results
+## Complete experiment results (one table)
 
-### Memory limits (1 CPU)
+The table includes the **initial baseline**, the **manual proof-of-concept run (01)**, and **all monitored runs (02–13)**. The memory sweep used **1 CPU**, while the CPU sweep used **512 MiB RAM**. Dashes mean the measurement was not collected or the test result was not established.
 
-Run 01 was an initial manual validation: 30.05 seconds, exit code 0, and 14/14 independent tests passed. CPU and RAM usage were not recorded, so this run is excluded from resource-performance comparisons.
+| Experiment | Run | RAM limit | CPU limit | Time (s) | Highest sampled RAM (MiB) | Highest sampled CPU (%) | Tests passed | Exit code | Outcome |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| **Before Codex** | Baseline | — | — | — | — | — | **9/14** | — | **5 tests failing** |
+| Initial manual validation | 01 | — | — | 30.05 | — | — | **14/14** | 0 | Success; resource measurements not collected |
+| Memory sweep | 02 | 2048 MiB | 1 | 26.35 | 233.4 | 32.26 | **14/14** | 0 | Success |
+| Memory sweep | 03 | 1024 MiB | 1 | 46.61 | 167.0 | 9.28 | — | 1 | Network/connection failure; not OOM |
+| Memory sweep | 04 | 1024 MiB | 1 | 23.96 | 209.2 | 16.29 | **14/14** | 0 | Success |
+| Memory sweep | 05 | 512 MiB | 1 | 30.31 | 226.4 | 27.23 | **14/14** | 0 | Success |
+| Memory sweep | 06 | 256 MiB | 1 | 26.13 | 221.7 | 39.46 | **14/14** | 0 | Success |
+| CPU sweep | 07 | 512 MiB | 0.5 | 28.58 | 230.6 | 35.83 | **14/14** | 0 | Success |
+| CPU sweep | 08 | 512 MiB | 0.25 | 34.36 | 238.8 | 25.16 | **14/14** | 0 | Success |
+| CPU sweep | 09 | 512 MiB | 1 | 26.32 | 222.7 | 38.71 | **14/14** | 0 | Success |
+| CPU sweep | 10 | 512 MiB | 0.5 | 28.60 | 210.9 | 44.18 | **14/14** | 0 | Success |
+| CPU sweep | 11 | 512 MiB | 0.25 | 30.28 | 217.6 | 25.24 | **14/14** | 0 | Success |
+| CPU sweep | 12 | 512 MiB | 1 | 28.58 | 226.7 | 35.18 | **14/14** | 0 | Success |
+| CPU sweep | 13 | 512 MiB | 1 | 28.40 | 213.4 | 26.05 | **14/14** | 0 | Success |
 
-| Run | RAM limit | Wall time (s) | Highest sampled RAM (MiB) | Tests | Exit |
-|---|---:|---:|---:|---:|---:|
-| run-02 | 2048 MiB | 26.35 | 233.4 | 14/14 | 0 |
-| run-04 | 1024 MiB | 23.96 | 209.2 | 14/14 | 0 |
-| run-05 | 512 MiB | 30.31 | 226.4 | 14/14 | 0 |
-| run-06 | 256 MiB | 26.13 | 221.7 | 14/14 | 0 |
+**What the results show:** Codex completed this particular repair successfully at **256 MiB RAM with 1 CPU** (Run 06) and separately at **0.25 CPU with 512 MiB RAM** (Runs 08 and 11). These two smallest limits were **not tested together**.
 
-Run 03 at 1024 MiB terminated with a connection/routing error after a reported Wi-Fi interruption (exit code 1, `OOMKilled=false`). It is **excluded from successful-run performance comparisons**, but retained as a recorded operational failure.
+**CPU averages (512 MiB RAM; automated CPU runs only):** 1 CPU = **27.77 s** (Runs 09, 12, 13); 0.5 CPU = **28.59 s** (Runs 07, 10); 0.25 CPU = **32.32 s** (Runs 08, 11). The 0.25-CPU average was about **16.4% longer** than the 1-CPU average. With only two or three trials per CPU setting and remote model/network latency included, this is a preliminary observation, **not** a statistically established causal slowdown.
 
-### CPU limits (512 MiB RAM; automated runner)
+**Failure note:** Run 03 ended with a connection/routing error after a reported Wi-Fi interruption, with `OOMKilled=false`. It is included for completeness but excluded from successful-run performance comparisons. Run 01 was an initial manual validation without CPU/RAM samples and is likewise excluded from resource comparisons.
 
-| CPU quota | Runs | Times (s) | Average time (s) | Correctness |
-|---:|---|---|---:|---|
-| 1 CPU | run-09, run-12, run-13 | 26.32, 28.58, 28.40 | **27.77** | 3/3 passed 14/14 |
-| 0.5 CPU | run-07, run-10 | 28.58, 28.60 | **28.59** | 2/2 passed 14/14 |
-| 0.25 CPU | run-08, run-11 | 34.36, 30.28 | **32.32** | 2/2 passed 14/14 |
+**Measurement note:** CPU and memory figures are the **highest observed samples**, not exact peaks. The Docker limits apply to the local Codex process and its child processes, while the AI model runs remotely.
 
-The average at 0.25 CPU was approximately 16.4% longer than the average at 1 CPU. This is a **descriptive observation**, not a causal estimate of CPU slowdown. The CPU settings have two or three automated samples, so more repetitions are needed before statistical claims.
+For machine-readable results, see [memory-results.csv](benchmark-results/memory-results.csv) and [cpu-results.csv](benchmark-results/cpu-results.csv).
 
 ## Diagnostics and reproducibility
 
