@@ -8,6 +8,67 @@ Evaluate whether a coding agent can modify an existing JavaScript application co
 
 > **Scope:** Docker limits apply to Codex CLI and the local processes it launches. The AI model runs remotely on OpenAI infrastructure, outside these limits. Consequently, wall-clock time includes network and model latency.
 
+## How the benchmark worked: before and after Codex
+
+### Step 1 — Start with an existing buggy web application
+
+We began with **TaskFlow**, an existing dependency-free JavaScript Task Manager. It allows a user to add tasks, mark them complete, search tasks, filter by completion status, sort by priority, and view task counts. **We did not ask Codex to build this application from scratch.** The purpose was to evaluate whether it could fix an existing codebase under limited local computing resources.
+
+We intentionally introduced **four bugs** in the task logic and created **14 independent automated tests**. Before Codex made any changes:
+
+| Initial check | Result |
+|---|---:|
+| Total automated tests | **14** |
+| Tests passing | **9** |
+| Tests failing | **5** |
+| Deliberately introduced bugs | **4** |
+
+**These numbers refer to tests, not files.** Five tests failed because the incorrect status-filtering logic affected two tests (completed and pending).
+
+### Step 2 — Understand the four defects
+
+| Feature | What happened before the repair | What Codex needed to fix |
+|---|---|---|
+| Case-sensitive search | Searching for "report" did not find "REPORT" | Match titles without considering case |
+| No-match search | A search with no results threw an error | Return an empty list instead of crashing |
+| Status filter | "completed" and "pending" returned the opposite results | Filter tasks by their actual status |
+| Priority sorting | Sorted from low to high priority | Sort high, then medium, then low |
+
+Other functionality, including adding tasks, toggling completion, and generating summaries, already worked and needed to remain correct.
+
+### Step 3 — Run Codex and verify its work
+
+1. For each experiment, copy the **original buggy project** into a fresh run folder. This prevents previous fixes from affecting later trials.
+2. Launch **Codex CLI inside a Docker container** with specified CPU and RAM limits.
+3. Give Codex the bug-fixing instructions in **task.md**. It inspects source files and makes the changes.
+4. After the agent finishes, run the **14 independent acceptance tests** in a separate Node.js container. The tests are not mounted into the agent workspace.
+5. Record elapsed time, sampled CPU/RAM use, test outcomes, exit code, and whether Docker reported an out-of-memory kill.
+
+**Process:** Original app (9/14 passing) → fresh copy → resource-limited Codex repair → independent tests → measured results.
+
+### Step 4 — What changed after Codex?
+
+For the successful repair runs, the independent tests reported:
+
+| Correctness measure | Before Codex | After successful repair |
+|---|---:|---:|
+| Tests passed | **9/14** | **14/14** |
+| Tests failed | **5** | **0** |
+| Pass rate on covered behaviors | **64.3%** | **100%** |
+
+**Main result: Codex improved the application from 9/14 passing to 14/14 passing tests.** It repaired the four intended bugs and preserved existing functions covered by the tests. This does not guarantee that the application is bug-free outside those tests.
+
+### Step 5 — Why we tested different CPU and RAM limits
+
+Correctness alone does not tell us whether a local coding harness is lightweight. We reran the **same task** with controlled Docker resources:
+
+- **Memory experiments:** 2 GiB, 1 GiB, 512 MiB and 256 MiB RAM, with CPU fixed at 1 CPU.
+- **CPU experiments:** 1, 0.5 and 0.25 CPU quotas, with RAM fixed at 512 MiB.
+
+The detailed results below document task completion times, observed peak memory, sampled CPU, and the one reported Wi-Fi-related failure. Codex **successfully completed this specific task** with **256 MiB at 1 CPU** and, separately, **512 MiB at 0.25 CPU**. We did not test those two lowest limits together.
+
+**Important interpretation:** Docker restricts the **local Codex harness and child processes**, not the remote AI model. Network/model response latency affects wall-clock time, and memory/CPU samples are not exact instantaneous peaks.
+
 ## Task: TaskFlow bug fixing
 
 The `starter-project/` directory contains a small, dependency-free JavaScript task-management web application with deliberately introduced defects. The task, defined in `task.md`, asks the agent to:
@@ -78,13 +139,13 @@ The volume is stored by Docker and **must not be exported or committed**. Never 
 Use a new run ID for every experiment to ensure the project starts from the original buggy fixture:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\run-benchmark.ps1 -Run run-13 -Memory 512m -Cpu 1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run-benchmark.ps1 -Run run-14 -Memory 512m -Cpu 1
 ```
 
 Example CPU-limited configuration:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\run-benchmark.ps1 -Run run-14 -Memory 512m -Cpu 0.5 -TimeoutSec 180
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run-benchmark.ps1 -Run run-15 -Memory 512m -Cpu 0.5 -TimeoutSec 180
 ```
 
 The runner creates a fresh task copy, starts Codex inside the configured container, samples Docker resource statistics, retains the Codex log, and runs independent acceptance tests afterward. Local outputs are written under `results/` and excluded from Git. The updated runner also writes `results/run-ID-metadata.json` recording the image ID, Codex CLI version, model name if present in logs, Docker engine version, task/fixture/test hashes, resource limits, timestamps, and final exit classification. These metadata files are local and can be selectively reviewed before publication. The runner requires an existing `codex-auth` volume; it never copies authentication data into a repository.
