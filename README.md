@@ -101,6 +101,8 @@ docker run --rm --memory="512m" --cpus="1" `
 
 ### Memory limits (1 CPU)
 
+Run 01 was an initial manual validation: 30.05 seconds, exit code 0, and 14/14 independent tests passed. CPU and RAM usage were not recorded, so this run is excluded from resource-performance comparisons.
+
 | Run | RAM limit | Wall time (s) | Highest sampled RAM (MiB) | Tests | Exit |
 |---|---:|---:|---:|---:|---:|
 | run-02 | 2048 MiB | 26.35 | 233.4 | 14/14 | 0 |
@@ -114,11 +116,11 @@ Run 03 at 1024 MiB terminated with a connection/routing error after a reported W
 
 | CPU quota | Runs | Times (s) | Average time (s) | Correctness |
 |---:|---|---|---:|---|
-| 1 CPU | run-09, run-12 | 26.32, 28.58 | **27.45** | 2/2 passed 14/14 |
+| 1 CPU | run-09, run-12, run-13 | 26.32, 28.58, 28.40 | **27.77** | 3/3 passed 14/14 |
 | 0.5 CPU | run-07, run-10 | 28.58, 28.60 | **28.59** | 2/2 passed 14/14 |
 | 0.25 CPU | run-08, run-11 | 34.36, 30.28 | **32.32** | 2/2 passed 14/14 |
 
-The average at 0.25 CPU was approximately 17.7% longer than the average at 1 CPU. This is a **descriptive observation**, not a causal estimate of CPU slowdown. Each CPU setting has only two automated samples, so more repetitions are needed before statistical claims.
+The average at 0.25 CPU was approximately 16.4% longer than the average at 1 CPU. This is a **descriptive observation**, not a causal estimate of CPU slowdown. The CPU settings have two or three automated samples, so more repetitions are needed before statistical claims.
 
 ## Diagnostics and reproducibility
 
