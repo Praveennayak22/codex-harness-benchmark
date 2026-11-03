@@ -1,0 +1,10 @@
+﻿.codex/
+codex-auth/
+run-*/
+results/
+*.log
+.env
+.env.*
+*.pem
+*.key
+node_modules/

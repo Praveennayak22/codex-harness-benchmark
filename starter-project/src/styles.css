@@ -1,0 +1,14 @@
+:root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#12213a;background:#f3f6fc}
+*{box-sizing:border-box}body{margin:0}.shell{max-width:820px;margin:48px auto;padding:0 20px}
+header{margin-bottom:30px}.eyebrow{color:#5068ad;letter-spacing:.17em;font-size:11px;font-weight:800}
+h1{font-size:43px;letter-spacing:-.04em;margin:9px 0}header p{color:#6b7890;margin:0}
+.panel{background:white;border:1px solid #dfe6f1;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 5px 15px #152b4710}
+h2{font-size:18px;margin:0 0 18px}.heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.heading h2{margin:0}.heading span{font-size:12px;color:#62718b}
+form,.filters{display:flex;gap:10px;flex-wrap:wrap}.filters{margin:24px 0 10px}
+input,select,button{padding:12px;border:1px solid #d8e0ec;border-radius:9px;font:inherit}input{flex:1;min-width:140px}
+button{color:#fff;background:#315cba;border-color:#315cba;font-weight:600;cursor:pointer}button:hover{background:#244a99}
+ul{padding:0;margin:0;list-style:none}.task{display:flex;align-items:center;gap:12px;padding:15px 5px;border-top:1px solid #edf0f6}
+.task input{flex:0;min-width:auto;transform:scale(1.2)}.task span{flex:1}.task .done{text-decoration:line-through;color:#8690a0}
+.priority{font-size:10px;font-weight:800;letter-spacing:.05em;border-radius:99px;padding:5px 9px}
+.high{background:#fff0ef;color:#ab3d38}.medium{background:#fff7db;color:#8b641d}.low{background:#eaf6ef;color:#286d4b}
+.empty{color:#7b879b;text-align:center;padding:24px}footer{color:#8b95a7;font-size:12px;text-align:center;margin:28px}
