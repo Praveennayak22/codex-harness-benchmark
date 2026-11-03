@@ -32,7 +32,9 @@ codex-harness-benchmark/
 ├── benchmark-results/
 │   ├── cpu-results.csv         # Shared automated experiment summary
 │   └── memory-results.csv      # Shared memory-experiment summary
-├── .gitignore
+├── .gitignore                  # Excludes raw logs, runs, and local credentials
+├── .dockerignore               # Minimal Docker build context
+├── .gitattributes              # Consistent Windows/Linux line endings
 └── README.md
 ```
 
@@ -45,7 +47,7 @@ Generated folders (`run-*`), raw logs, and local authentication information are 
 - Internet access and a valid Codex sign-in
 - Git for uploading the project
 
-The Dockerfile builds the container using a Node.js 22 Linux base and installs `@openai/codex`. Initial experiments used **Codex CLI 0.166.0**; npm's latest version may differ when rebuilding. For strict reproducibility, pin the Codex package and image digest before performing a formal comparison.
+The improved Dockerfile pins **Codex CLI 0.166.0** and the **Node.js 22 base image digest recorded for the original amd64 environment**, instead of installing moving `latest` dependencies. The independent Node.js test container also uses that image digest. This preserves the local tool version and base image; the remotely served AI model and its service behavior are outside the Docker image. Rebuilding the frozen image does not retroactively change the original measurements.
 
 ## Setup
 
@@ -53,6 +55,7 @@ From the repository root in PowerShell:
 
 ```powershell
 docker build -t codex-benchmark .
+docker run --rm codex-benchmark
 docker volume create codex-auth
 ```
 
@@ -81,10 +84,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\run-benchmark.ps1 -Run run
 Example CPU-limited configuration:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\run-benchmark.ps1 -Run run-14 -Memory 512m -Cpu 0.5
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run-benchmark.ps1 -Run run-14 -Memory 512m -Cpu 0.5 -TimeoutSec 180
 ```
 
-The runner creates a fresh task copy, starts Codex inside the configured container, samples Docker resource statistics, retains the Codex log, and runs independent acceptance tests afterward. Local outputs are written under `results/` and excluded from Git. The exact metrics available depend on the runner version.
+The runner creates a fresh task copy, starts Codex inside the configured container, samples Docker resource statistics, retains the Codex log, and runs independent acceptance tests afterward. Local outputs are written under `results/` and excluded from Git. The updated runner also writes `results/run-ID-metadata.json` recording the image ID, Codex CLI version, model name if present in logs, Docker engine version, task/fixture/test hashes, resource limits, timestamps, and final exit classification. These metadata files are local and can be selectively reviewed before publication. The runner requires an existing `codex-auth` volume; it never copies authentication data into a repository.
 
 To test the original fixture independently:
 
@@ -115,21 +118,29 @@ Run 03 at 1024 MiB terminated with a connection/routing error after a reported W
 | 0.5 CPU | run-07, run-10 | 28.58, 28.60 | **28.59** | 2/2 passed 14/14 |
 | 0.25 CPU | run-08, run-11 | 34.36, 30.28 | **32.32** | 2/2 passed 14/14 |
 
-The average at 0.25 CPU was approximately 17.7% longer than the average at 1 CPU. This is a **descriptive observation**, not a causal estimate of CPU slowdown.
+The average at 0.25 CPU was approximately 17.7% longer than the average at 1 CPU. This is a **descriptive observation**, not a causal estimate of CPU slowdown. Each CPU setting has only two automated samples, so more repetitions are needed before statistical claims.
+
+## Diagnostics and reproducibility
+
+- Each new run must use an unused ID, so the original buggy fixture is never silently overwritten.
+- The runner differentiates `Success`, `TestFailure`, `OOMKilled`, `Timeout`, `AgentError`, and a *heuristic* `NetworkError` based on messages in the private log. A network failure does not prove the resource limit is inadequate.
+- The execution timer covers container startup, Codex execution, and monitoring overhead; **independent tests run afterward and are not included** in that time.
+- Results already published in `benchmark-results/` are historic observations. The improved runner does not regenerate or alter them.
+- For a comparable cross-harness study, record the underlying model, actual task inputs, repeated runs, and any interruptions; keep each tool's execution conditions equivalent as far as practical.
 
 ## Interpretation and limitations
 
 - Codex completed the TaskFlow task successfully in the tested configurations, including one run at **256 MiB RAM / 1 CPU** and two runs at **512 MiB RAM / 0.25 CPU**. These were tested **separately**; the combination of 256 MiB and 0.25 CPU has not been established.
-- The measured memory peaks and CPU percentages are **sampled Docker statistics**, not exact instantaneous peaks. The highest reported CPU percentage is not cumulative CPU time.
+- The measured memory peaks and CPU percentages are **sampled Docker statistics**, not exact instantaneous peaks. The highest reported CPU percentage is not cumulative CPU time. `docker stats --no-stream` has nontrivial sampling overhead; despite a short sleep, samples may be several seconds apart.
 - A low CPU quota may affect local commands while remote inference latency can dominate wall-clock duration. Internet interruptions can cause unrelated failures.
-- One task and a small number of runs per setting do not establish general reliability, minimum hardware requirements, or statistically significant differences.
-- All 14 Node.js tests passing validates the behaviors covered by those tests. It is not a substitute for browser integration, visual checks, or broader correctness tests.
+- One task and a small number of runs per setting do not establish general reliability, minimum hardware requirements, or statistically significant differences. This is a **smoke-test benchmark**: the task prompt explicitly names the bugs, making it less challenging than an unseen real-world issue.
+- All 14 Node.js tests passing validates the behaviors covered by those tests. It is not a substitute for browser integration, visual checks, or broader correctness tests. The independent acceptance tests are outside the agent workspace but the intended behaviors are specified in the prompt.
 - The setup measures the *Codex-based coding agent* as configured here; no claim of superiority over **Loop**, Claude Code, or any other harness is made.
 - For a fair multi-harness study, use the same starter commit, prompt, independent tests, CPU/RAM limits, measurement method, repetition count, and (where feasible) model. Different remote models introduce an additional comparison variable.
 
 ## Security notes
 
-The benchmark runner uses `codex exec --sandbox danger-full-access` **inside a Docker container**, where Docker is the primary isolation boundary. The container is not an absolute security boundary: use only trusted fixtures; do not mount personal directories, the Docker socket, or secrets into the workspace. Authentication uses a separate Docker volume. Review all exported artifacts before publication.
+The benchmark runner uses `codex exec --sandbox danger-full-access` **inside a Docker container**, where Docker is the primary isolation boundary. The container is not an absolute security boundary: use only trusted fixtures; do not mount personal directories, the Docker socket, or secrets into the workspace. Authentication uses a separate Docker volume (which should not be exported). Raw agent logs can contain sensitive details and are excluded from Git. Review all exported artifacts before publication.
 
 ## Next steps
 

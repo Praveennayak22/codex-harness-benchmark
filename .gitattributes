@@ -1,0 +1,8 @@
+# Make line endings deterministic across Windows and Linux.
+* text=auto
+Dockerfile text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.mjs text eol=lf
+*.md text eol=lf
+*.csv text eol=lf

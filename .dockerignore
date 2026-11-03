@@ -1,0 +1,4 @@
+# The image needs only the Dockerfile. Do not send local workspaces,
+# results, or possible authentication material to the Docker builder.
+**
+!Dockerfile
